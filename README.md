@@ -51,3 +51,9 @@ icons/            Extension icons
 ## Version
 
 **v0.6.0**
+
+## License
+
+Copyright (C) 2026 Mayank Malviya
+
+Licensed under the [GNU General Public License v3.0](LICENSE).
