@@ -17,7 +17,9 @@
 
   const SKIP = new Set(['SCRIPT','STYLE','NOSCRIPT','NAV','HEADER','FOOTER','ASIDE','FORM','BUTTON','SVG','CANVAS','SELECT','TEXTAREA','SUP']);
   // Containers whose text is navigational / non-prose — skip anything inside them.
-  const SKIP_CONTAINER = 'nav,header,footer,aside,.navbox,.infobox,.sidebar,.reflist,.references,.mw-editsection,.hatnote,.thumb,.toc,.mw-jump-link,.metadata,.navigation-not-searchable,figure';
+  // ARIA landmark roles are included so app-like pages (e.g. Google AI Mode) that
+  // use <div role="navigation|search|...">, not the semantic tags, are still skipped.
+  const SKIP_CONTAINER = 'nav,header,footer,aside,[role="navigation"],[role="banner"],[role="contentinfo"],[role="complementary"],[role="search"],.navbox,.infobox,.sidebar,.reflist,.references,.mw-editsection,.hatnote,.thumb,.toc,.mw-jump-link,.metadata,.navigation-not-searchable,figure';
 
   let els = [];          // DOM element per block
   let texts = [];        // normalized text per block (matches what TTS receives)
@@ -60,6 +62,37 @@
     return s.replace(/\s+/g, ' ').trim();
   }
 
+  // Deep scan: collect visible, text-bearing *leaf* block elements — including
+  // generic <div>/<section>/<span> that app-like pages (e.g. Google AI Mode) use
+  // to render prose instead of semantic <p>/<li>/<h*> tags. Returns element refs
+  // so highlighting and click-to-read keep working. Used only as a fallback when
+  // the semantic pass finds nothing, so pages that already work are unaffected.
+  function extractDeep(root, opts) {
+    const SEL = 'p,li,blockquote,figcaption,dd,dt,h1,h2,h3,h4,h5,h6,div,section,td,th,pre,span';
+    const raw = [];
+    root.querySelectorAll(SEL).forEach((el) => {
+      if (SKIP.has(el.tagName)) return;
+      if (opts.skipHeadings && /^H[1-6]$/.test(el.tagName)) return;
+      if (el.closest(SKIP_CONTAINER)) return;
+      if (!visible(el)) return;
+      const t = cleanForSpeech(el.innerText, opts);
+      if (t.length < 2) return;
+      if (/^\[\d+\]$/.test(t)) return;
+      raw.push({ el, t });
+    });
+    // Keep only leaf-most blocks: drop any element that is an ancestor of another
+    // kept element, so we read the smallest text container, not its wrappers.
+    const kept = raw.filter((a) => !raw.some((b) => b.el !== a.el && a.el.contains(b.el)));
+    const seen = new Set();
+    const outEls = [], outTexts = [];
+    kept.forEach(({ el, t }) => {
+      if (seen.has(t)) return;
+      seen.add(t);
+      outEls.push(el); outTexts.push(t);
+    });
+    return { els: outEls, texts: outTexts };
+  }
+
   function extract(opts) {
     opts = opts || {};
     els = []; texts = [];
@@ -87,9 +120,19 @@
       texts.push(t);
     });
     if (texts.length < 2) {
-      const raw = norm(root.innerText).split(/(?<=[.!?])\s+/).filter(s => s.length > 30);
-      // fall back to whole-body sentences with no element refs
-      els = []; texts = raw;
+      // Semantic pass found nothing usable. Deep-scan for text-bearing leaf blocks,
+      // first within the chosen root, then across the whole page if needed.
+      let deep = extractDeep(root, opts);
+      if (deep.texts.length < 2 && root !== document.body) {
+        deep = extractDeep(document.body, opts);
+      }
+      if (deep.texts.length >= 2) {
+        els = deep.els; texts = deep.texts;
+      } else {
+        // Last resort: whole-page sentences with no element refs.
+        const raw = norm(document.body.innerText).split(/(?<=[.!?])\s+/).filter(s => s.length > 30);
+        els = []; texts = raw;
+      }
     }
     return texts;
   }
