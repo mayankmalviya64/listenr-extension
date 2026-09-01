@@ -36,7 +36,10 @@ function setCors(res) {
 }
 
 function isClientId(value) {
-  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  return typeof value === 'string' && (
+    /^[1-9]\d{0,19}\.[1-9]\d{0,19}$/.test(value) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
 }
 
 function isVersion(value) {
@@ -76,7 +79,13 @@ export default async function handler(req, res) {
   setCors(res);
 
   if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method === 'GET') return json(res, 200, { ok: true, service: 'listenr-extension-analytics' });
+  if (req.method === 'GET') {
+    return json(res, 200, {
+      ok: true,
+      service: 'listenr-extension-analytics',
+      ga_configured: Boolean(process.env.GA_MEASUREMENT_ID && process.env.GA_API_SECRET)
+    });
+  }
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
 
   const length = Number(req.headers['content-length'] || 0);
@@ -89,7 +98,10 @@ export default async function handler(req, res) {
   const apiSecret = process.env.GA_API_SECRET;
   if (!measurementId || !apiSecret) return json(res, 503, { ok: false, error: 'analytics_not_configured' });
 
-  const endpoint = new URL('https://www.google-analytics.com/mp/collect');
+  const validateOnly = req.query && req.query.validation === 'debug';
+  const endpoint = new URL(validateOnly
+    ? 'https://www.google-analytics.com/debug/mp/collect'
+    : 'https://www.google-analytics.com/mp/collect');
   endpoint.searchParams.set('measurement_id', measurementId);
   endpoint.searchParams.set('api_secret', apiSecret);
 
@@ -97,9 +109,18 @@ export default async function handler(req, res) {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(validateOnly
+        ? Object.assign({ validation_behavior: 'ENFORCE_RECOMMENDATIONS' }, payload)
+        : payload)
     });
     if (!response.ok) return json(res, 502, { ok: false, error: 'analytics_upstream_failed' });
+    if (validateOnly) {
+      const result = await response.json();
+      return json(res, 200, {
+        ok: Array.isArray(result.validationMessages) && result.validationMessages.length === 0,
+        validation_messages: result.validationMessages || []
+      });
+    }
     return res.status(204).end();
   } catch {
     return json(res, 502, { ok: false, error: 'analytics_unavailable' });

@@ -5,7 +5,9 @@
 
   const ENDPOINT = 'https://listenr-extension-analytics.vercel.app/api/collect';
   const CLIENT_ID_KEY = 'analyticsClientId';
+  const STATUS_KEY = 'analyticsStatus';
   const SESSION_ID = Math.floor(Date.now() / 1000);
+  const REQUEST_TIMEOUT_MS = 10000;
 
   function platform() {
     const ua = navigator.userAgent || '';
@@ -18,10 +20,33 @@
 
   async function clientId() {
     const stored = await chrome.storage.local.get([CLIENT_ID_KEY]);
-    if (/^[0-9a-f-]{36}$/i.test(stored[CLIENT_ID_KEY] || '')) return stored[CLIENT_ID_KEY];
-    const id = crypto.randomUUID();
+    if (/^[1-9]\d{0,19}\.[1-9]\d{0,19}$/.test(stored[CLIENT_ID_KEY] || '')) return stored[CLIENT_ID_KEY];
+    const random = crypto.getRandomValues(new Uint32Array(1))[0] || 1;
+    const id = `${random}.${Math.floor(Date.now() / 1000)}`;
     await chrome.storage.local.set({ [CLIENT_ID_KEY]: id });
     return id;
+  }
+
+  async function saveStatus(patch) {
+    try {
+      const stored = await chrome.storage.local.get([STATUS_KEY]);
+      const current = stored[STATUS_KEY] || {};
+      await chrome.storage.local.set({
+        [STATUS_KEY]: Object.assign({}, current, patch)
+      });
+    } catch {
+      // Diagnostics must not interfere with playback.
+    }
+  }
+
+  async function request(url, options) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function rateBucket(rate) {
@@ -51,13 +76,15 @@
   }
 
   async function track(eventName, eventParams) {
+    const attemptedAt = Date.now();
+    await saveStatus({ lastAttemptAt: attemptedAt, lastEvent: eventName });
     try {
       const params = Object.assign({
         session_id: SESSION_ID,
         app_version: chrome.runtime.getManifest().version,
         platform: platform()
       }, eventParams || {});
-      await fetch(ENDPOINT, {
+      const response = await request(ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -66,10 +93,51 @@
           params
         })
       });
-    } catch {
-      // Analytics must never interfere with reading or playback.
+      if (!response.ok) throw new Error(`relay_http_${response.status}`);
+      await saveStatus({
+        lastSuccessAt: Date.now(),
+        lastHttpStatus: response.status,
+        lastError: null
+      });
+      return true;
+    } catch (error) {
+      await saveStatus({
+        lastHttpStatus: null,
+        lastError: error && error.name === 'AbortError' ? 'timeout' : String(error && error.message || 'network_error')
+      });
+      return false;
     }
   }
 
-  self.listenrAnalytics = Object.freeze({ track, rateBucket, documentSizeBucket, progressBucket });
+  async function status() {
+    const stored = await chrome.storage.local.get([STATUS_KEY]);
+    return stored[STATUS_KEY] || {};
+  }
+
+  async function checkConnection() {
+    const attemptedAt = Date.now();
+    await saveStatus({ healthAttemptAt: attemptedAt });
+    try {
+      const response = await request(ENDPOINT, { method: 'GET', cache: 'no-store' });
+      const body = response.ok ? await response.json() : null;
+      if (!response.ok || !body || body.ok !== true || body.ga_configured !== true) {
+        throw new Error(`relay_health_${response.status}`);
+      }
+      await saveStatus({
+        healthSuccessAt: Date.now(),
+        healthHttpStatus: response.status,
+        healthError: null
+      });
+    } catch (error) {
+      await saveStatus({
+        healthHttpStatus: null,
+        healthError: error && error.name === 'AbortError' ? 'timeout' : String(error && error.message || 'network_error')
+      });
+    }
+    return status();
+  }
+
+  self.listenrAnalytics = Object.freeze({
+    track, status, checkConnection, rateBucket, documentSizeBucket, progressBucket
+  });
 })();

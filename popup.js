@@ -125,6 +125,7 @@ function openSettings() {
   const r = String(s.rate || 2);
   $('defRate').value = ['1','1.25','1.5','1.75','2','2.5','3'].includes(r) ? r : '2';
   renderDiag(s.lastShortcut);
+  refreshAnalyticsDiag(false);
   if (diagTimer) clearInterval(diagTimer);
   diagTimer = setInterval(() => {
     send({ cmd: 'getState' }).then((r2) => {
@@ -157,6 +158,37 @@ function renderDiag(ls) {
   d.innerHTML = 'Last: <b style="color:var(--text);">' + (DIAG_NAMES[ls.cmd] || ls.cmd) + '</b><br>via ' + via + ' \u00b7 ' + (ago < 2 ? 'just now' : ago + 's ago');
 }
 
+function relativeTime(timestamp) {
+  if (!timestamp) return 'never';
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 2) return 'just now';
+  if (seconds < 60) return seconds + 's ago';
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+  return Math.floor(seconds / 3600) + 'h ago';
+}
+
+function renderAnalyticsDiag(status) {
+  const d = $('analyticsDiag');
+  if (!d) return;
+  const relayOk = !!(status && status.healthSuccessAt && !status.healthError);
+  const eventOk = !!(status && status.lastSuccessAt && !status.lastError);
+  const relay = relayOk ? '<b style="color:#15966b;">Connected</b>' : '<b style="color:#c06a14;">Not checked</b>';
+  const delivery = eventOk
+    ? '<b style="color:#15966b;">Accepted</b> · ' + relativeTime(status.lastSuccessAt)
+    : (status && status.lastError
+      ? '<b style="color:#c33;">Failed</b> · ' + status.lastError
+      : 'No event delivered yet');
+  d.innerHTML = 'Relay: ' + relay + '<br>Latest event: ' + delivery +
+    '<br><span style="font-size:10.5px;">Version ' + chrome.runtime.getManifest().version + '</span>';
+}
+
+function refreshAnalyticsDiag(runCheck) {
+  const command = runCheck ? 'checkAnalytics' : 'getAnalyticsStatus';
+  return send({ cmd: command }).then((result) => {
+    renderAnalyticsDiag(result && result.status || {});
+  }).catch(() => renderAnalyticsDiag({ healthError: 'extension_unavailable' }));
+}
+
 function closeSettings() {
   settingsOpen = false;
   if (diagTimer) { clearInterval(diagTimer); diagTimer = null; }
@@ -166,6 +198,10 @@ function closeSettings() {
 }
 $('gearBtn').addEventListener('click', () => settingsOpen ? closeSettings() : openSettings());
 $('backBtn').addEventListener('click', closeSettings);
+$('analyticsCheck').addEventListener('click', () => {
+  $('analyticsDiag').textContent = 'Checking relay configuration…';
+  refreshAnalyticsDiag(true);
+});
 
 $('voiceSel').addEventListener('change', (e) => send({ cmd: 'setVoice', voiceURI: e.target.value }));
 $('defRate').addEventListener('change', (e) => send({ cmd: 'setRate', rate: Number(e.target.value) }));

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { sanitizeEvent } from './collect.js';
 
-const clientId = '123e4567-e89b-42d3-a456-426614174000';
+const clientId = '1234567890.1788250000';
 
 const clean = sanitizeEvent({
   client_id: clientId,
@@ -33,5 +33,9 @@ assert.deepEqual(clean.events[0].params, {
 
 assert.equal(sanitizeEvent({ client_id: clientId, event_name: 'unknown', params: {} }), null);
 assert.equal(sanitizeEvent({ client_id: 'not-a-uuid', event_name: 'extension_opened', params: {} }), null);
+assert.equal(
+  sanitizeEvent({ client_id: '123e4567-e89b-42d3-a456-426614174000', event_name: 'extension_opened', params: {} }).client_id,
+  '123e4567-e89b-42d3-a456-426614174000'
+);
 
 console.log('analytics relay validation passed');

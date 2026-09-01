@@ -46,11 +46,13 @@ icons/            Extension icons
 ## Notes
 
 - On macOS, Listenr prefers the **Samantha** voice; install it via System Settings → Accessibility → Spoken Content → System Voice if missing.
-- Playback position and settings are stored locally via `chrome.storage` — nothing leaves your machine.
+- Playback position and settings are stored locally via `chrome.storage`.
+- Listenr sends limited pseudonymous reliability and feature-usage events through its analytics relay. It never sends page URLs, titles, page text, highlighted text, search terms, or voice names. See [PRIVACY.md](PRIVACY.md).
+- For delivery checks, event definitions, and the correct GA4 verification flow, see [ANALYTICS.md](ANALYTICS.md).
 
 ## Version
 
-**v0.6.0**
+**v0.6.1**
 
 ## License
 

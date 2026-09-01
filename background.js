@@ -398,6 +398,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })();
       return true;
     case 'getState': sendResponse({ state: publicState() }); return true;
+    case 'getAnalyticsStatus':
+      listenrAnalytics.status().then((status) => sendResponse({ status }));
+      return true;
+    case 'checkAnalytics':
+      listenrAnalytics.checkConnection().then((status) => sendResponse({ status }));
+      return true;
     case 'toggle': toggle(msg.viaKey ? 'page_control' : 'popup'); break;
     case 'play': play(msg.viaKey ? 'page_control' : 'popup'); break;
     case 'pause': pause(msg.viaKey ? 'page_control' : 'popup'); break;

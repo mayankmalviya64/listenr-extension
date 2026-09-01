@@ -2,9 +2,6 @@
 <html>
 <head>
 <meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   :root{
@@ -17,7 +14,7 @@
     --panel:#182a44; --panel2:#16273f; --border:#24395a; --pillbg:#1c3457; --pilltx:#8fc3ff;
     --track:#24395a; --accent:#2ba3d8; --accent2:#4a90e2;
   }
-  body{width:300px;font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background .2s;}
+  body{width:300px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background .2s;}
   .head{display:flex;align-items:center;gap:11px;padding:12px 13px 11px;background:linear-gradient(135deg,#0a3d8f 0%,#0e63b3 55%,#13b0b8 140%);}
   .logo{width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22);}
   .title{font-size:17px;font-weight:800;color:#fff;letter-spacing:-.3px;line-height:1.05;}
@@ -179,6 +176,12 @@
     <div style="display:flex;flex-direction:column;gap:6px;">
       <span class="label">SHORTCUT DIAGNOSTICS</span>
       <div id="diag" style="font-size:11.5px;font-weight:600;color:var(--muted);line-height:1.5;background:var(--panel);border:1.5px solid var(--border);border-radius:11px;padding:9px 11px;"></div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <span class="label">ANALYTICS DIAGNOSTICS</span>
+      <div id="analyticsDiag" style="font-size:11.5px;font-weight:600;color:var(--muted);line-height:1.5;background:var(--panel);border:1.5px solid var(--border);border-radius:11px;padding:9px 11px;">Checking…</div>
+      <button id="analyticsCheck" style="font-family:inherit;font-size:11.5px;font-weight:800;color:#fff;background:var(--accent);border:0;border-radius:9px;padding:8px 10px;cursor:pointer;">Check analytics connection</button>
     </div>
   </div>
 
