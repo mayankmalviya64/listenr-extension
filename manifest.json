@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Listenr — Read any page aloud",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Reads the readable text of any web page aloud with synced highlighting and keyboard controls.",
   "permissions": ["scripting", "storage", "offscreen", "tabs"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": ["<all_urls>", "https://listenr-extension-analytics.vercel.app/*"],
   "background": {
     "service_worker": "background.js"
   },

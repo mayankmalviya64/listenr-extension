@@ -1,3 +1,5 @@
+importScripts('analytics.js');
+
 // Listenr service worker — coordinates popup, content script (highlighting),
 // and the offscreen document (speech). Holds playback state.
 
@@ -23,6 +25,12 @@ let S = {
 };
 
 const IS_MAC = /Mac/i.test(navigator.userAgent);
+
+function analyticsErrorType(error) {
+  if (error === 'protected') return 'protected_page';
+  if (error === 'notext') return 'no_readable_text';
+  return 'unknown';
+}
 
 function pickVoice() {
   // 1. user's preferred voice, if installed
@@ -162,6 +170,7 @@ async function speakCurrent() {
   if (S.current < 0) S.current = 0;
   if (S.current >= S.blocks.length) {
     S.playing = false; S.status = 'finished';
+    listenrAnalytics.track('playback_completed', { interaction_source: 'background' });
     toContent({ cmd: 'clear' });
     // page finished — forget the saved position
     if (S.url) {
@@ -198,25 +207,44 @@ async function ensureSettings() {
   pickVoice();
 }
 
-async function play() {
+async function play(interactionSource = 'background') {
   await ensureSettings();
   if (!S.blocks.length || S.error) {
     const ok = await loadTab();
-    if (!ok) { broadcast(); return; }
+    if (!ok) {
+      listenrAnalytics.track('playback_error', {
+        interaction_source: interactionSource,
+        error_type: analyticsErrorType(S.error)
+      });
+      broadcast();
+      return;
+    }
   }
+  listenrAnalytics.track('playback_started', {
+    interaction_source: interactionSource,
+    rate_bucket: listenrAnalytics.rateBucket(S.rate),
+    document_size_bucket: listenrAnalytics.documentSizeBucket(wordsTotal())
+  });
   await speakCurrent();
 }
 
-async function pause() {
+async function pause(interactionSource = 'background') {
+  const wasPlaying = S.playing;
   S.playing = false; S.status = 'paused';
+  if (wasPlaying) {
+    listenrAnalytics.track('playback_paused', {
+      interaction_source: interactionSource,
+      progress_bucket: listenrAnalytics.progressBucket(S.current, S.blocks.length)
+    });
+  }
   savePosition();
   await toOffscreen({ cmd: 'stop' });
   broadcast();
 }
 
-async function toggle() {
-  if (S.playing) { await pause(); hud('⏸ Paused'); return; }
-  await play();
+async function toggle(interactionSource = 'background') {
+  if (S.playing) { await pause(interactionSource); hud('⏸ Paused'); return; }
+  await play(interactionSource);
   hud(S.error ? 'Listenr: no readable text here' : '▶︎ Reading');
 }
 
@@ -341,6 +369,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (S.playing) { S.current++; S.startChar = 0; speakCurrent(); }
     } else if (msg.type === 'error') {
       S.playing = false; S.status = 'paused'; broadcast();
+      listenrAnalytics.track('playback_error', { interaction_source: 'background', error_type: 'speech_error' });
     }
     return;
   }
@@ -355,6 +384,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.cmd) {
     case 'init':
       (async () => {
+        listenrAnalytics.track('extension_opened', { interaction_source: 'popup' });
         await ensureSettings();
         toOffscreen({ cmd: 'getVoices' });
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -368,9 +398,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       })();
       return true;
     case 'getState': sendResponse({ state: publicState() }); return true;
-    case 'toggle': toggle(); break;
-    case 'play': play(); break;
-    case 'pause': pause(); break;
+    case 'toggle': toggle(msg.viaKey ? 'page_control' : 'popup'); break;
+    case 'play': play(msg.viaKey ? 'page_control' : 'popup'); break;
+    case 'pause': pause(msg.viaKey ? 'page_control' : 'popup'); break;
     case 'next': next(); break;
     case 'prev': prev(); break;
     case 'nextSentence': (async () => { await ensureSettings(); await nextSentence(); hud('Next sentence →'); })(); break;
@@ -450,7 +480,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function runCommand(command) {
   S.lastShortcut = { cmd: command, via: 'chrome', t: Date.now() };
   await ensureSettings();
-  if (command === 'toggle-play') await toggle();
+  if (command === 'toggle-play') await toggle('shortcut');
   else if (command === 'next-sentence') { await nextSentence(); hud('Next sentence →'); }
   else if (command === 'prev-sentence') { await prevSentence(); hud('← Previous sentence'); }
   else if (command === 'next-block') await next();
@@ -459,6 +489,14 @@ async function runCommand(command) {
   else if (command === 'rate-down') await changeRate(-0.1);
 }
 chrome.commands.onCommand.addListener((command) => { runCommand(command); });
+
+chrome.runtime.onInstalled.addListener((details) => {
+  const eventName = details.reason === 'install' ? 'extension_installed' : 'extension_updated';
+  listenrAnalytics.track(eventName, {
+    interaction_source: 'background',
+    install_reason: details.reason
+  });
+});
 
 // Stop & clear highlight when the user navigates or switches tabs.
 chrome.tabs.onActivated.addListener(() => {
