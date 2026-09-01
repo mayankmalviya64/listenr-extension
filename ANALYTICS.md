@@ -1,6 +1,6 @@
 # Listenr analytics verification
 
-Listenr v0.6.1 sends pseudonymous events through the Listenr Vercel relay to the Google Analytics 4 property configured by `GA_MEASUREMENT_ID`. Analytics begins only after a user receives v0.6.1 or later; Chrome Web Store user counts are not historical GA4 active-user counts.
+Listenr v0.6.1 and later send pseudonymous events through the Listenr Vercel relay to the Google Analytics 4 property configured by `GA_MEASUREMENT_ID`. Analytics begins only after a user receives v0.6.1 or later; Chrome Web Store user counts are not historical GA4 active-user counts.
 
 ## Fast verification
 

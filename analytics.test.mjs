@@ -10,7 +10,7 @@ Object.defineProperty(globalThis, 'navigator', {
 });
 Object.defineProperty(globalThis, 'chrome', {
   value: {
-    runtime: { getManifest: () => ({ version: '0.6.1' }) },
+    runtime: { getManifest: () => ({ version: '0.6.2' }) },
     storage: {
       local: {
         async get(keys) {
@@ -44,7 +44,7 @@ assert.equal(await self.listenrAnalytics.track('extension_opened', { interaction
 const payload = JSON.parse(requests[0].options.body);
 assert.match(payload.client_id, /^[1-9]\d{0,19}\.[1-9]\d{0,19}$/);
 assert.equal(payload.event_name, 'extension_opened');
-assert.equal(payload.params.app_version, '0.6.1');
+assert.equal(payload.params.app_version, '0.6.2');
 assert.equal(payload.params.platform, 'mac');
 
 let status = await self.listenrAnalytics.status();
